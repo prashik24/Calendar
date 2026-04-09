@@ -1,65 +1,301 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useMemo, useState } from "react";
+import {
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isAfter,
+  isBefore,
+  isSameDay,
+  isSameMonth,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+} from "date-fns";
+
+type StoredNotes = Record<string, string>;
+
+function getMonthKey(date: Date) {
+  return format(date, "yyyy-MM");
+}
+
+function getRangeKey(start: Date | null, end: Date | null) {
+  if (!start || !end) return "";
+  return `${format(start, "yyyy-MM-dd")}__${format(end, "yyyy-MM-dd")}`;
+}
+
+export default function Page() {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [monthNotes, setMonthNotes] = useState<StoredNotes>({});
+  const [rangeNotes, setRangeNotes] = useState<StoredNotes>({});
+  const [mounted, setMounted] = useState(false);
+
+  const monthKey = getMonthKey(currentMonth);
+  const rangeKey = getRangeKey(startDate, endDate);
+
+  useEffect(() => {
+    setMounted(true);
+
+    const savedMonthNotes = localStorage.getItem("wall-calendar-month-notes");
+    const savedRangeNotes = localStorage.getItem("wall-calendar-range-notes");
+    const savedStart = localStorage.getItem("wall-calendar-start-date");
+    const savedEnd = localStorage.getItem("wall-calendar-end-date");
+    const savedMonth = localStorage.getItem("wall-calendar-current-month");
+
+    if (savedMonthNotes) {
+      setMonthNotes(JSON.parse(savedMonthNotes));
+    }
+
+    if (savedRangeNotes) {
+      setRangeNotes(JSON.parse(savedRangeNotes));
+    }
+
+    if (savedStart) {
+      setStartDate(parseISO(savedStart));
+    }
+
+    if (savedEnd) {
+      setEndDate(parseISO(savedEnd));
+    }
+
+    if (savedMonth) {
+      setCurrentMonth(parseISO(savedMonth));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("wall-calendar-month-notes", JSON.stringify(monthNotes));
+  }, [monthNotes, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("wall-calendar-range-notes", JSON.stringify(rangeNotes));
+  }, [rangeNotes, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    if (startDate) {
+      localStorage.setItem("wall-calendar-start-date", startDate.toISOString());
+    } else {
+      localStorage.removeItem("wall-calendar-start-date");
+    }
+
+    if (endDate) {
+      localStorage.setItem("wall-calendar-end-date", endDate.toISOString());
+    } else {
+      localStorage.removeItem("wall-calendar-end-date");
+    }
+  }, [startDate, endDate, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("wall-calendar-current-month", currentMonth.toISOString());
+  }, [currentMonth, mounted]);
+
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+
+    return eachDayOfInterval({
+      start: gridStart,
+      end: gridEnd,
+    });
+  }, [currentMonth]);
+
+  function handleDayClick(day: Date) {
+    if (!startDate || (startDate && endDate)) {
+      setStartDate(day);
+      setEndDate(null);
+      return;
+    }
+
+    if (isBefore(day, startDate)) {
+      setEndDate(startDate);
+      setStartDate(day);
+      return;
+    }
+
+    if (isSameDay(day, startDate)) {
+      setEndDate(day);
+      return;
+    }
+
+    setEndDate(day);
+  }
+
+  function isInRange(day: Date) {
+    if (!startDate || !endDate) return false;
+    return isAfter(day, startDate) && isBefore(day, endDate);
+  }
+
+  function clearSelection() {
+    setStartDate(null);
+    setEndDate(null);
+  }
+
+  function updateMonthNote(value: string) {
+    setMonthNotes((prev) => ({
+      ...prev,
+      [monthKey]: value,
+    }));
+  }
+
+  function updateRangeNote(value: string) {
+    if (!rangeKey) return;
+    setRangeNotes((prev) => ({
+      ...prev,
+      [rangeKey]: value,
+    }));
+  }
+
+  const currentMonthNote = monthNotes[monthKey] || "";
+  const currentRangeNote = rangeNotes[rangeKey] || "";
+
+  const selectedSummary = startDate && endDate
+    ? `${format(startDate, "dd MMM yyyy")} → ${format(endDate, "dd MMM yyyy")}`
+    : startDate
+    ? `${format(startDate, "dd MMM yyyy")} selected`
+    : "No date range selected";
+
+  const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="pageShell">
+      <div className="calendarFrame">
+        <div className="spiralBar" aria-hidden="true">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <span key={i} className="spiralRing" />
+          ))}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+        <section className="calendarCard">
+          <div className="heroPanel">
+            <div className="heroImageWrap">
+              <div className="heroImageOverlay" />
+              <div className="heroContent">
+                <p className="heroYear">{format(currentMonth, "yyyy")}</p>
+                <h1 className="heroMonth">{format(currentMonth, "MMMM")}</h1>
+                <p className="heroTag">Interactive Wall Calendar</p>
+              </div>
+            </div>
+
+            <div className="heroActions">
+              <button
+                className="navBtn"
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              >
+                ← Prev
+              </button>
+              <button
+                className="todayBtn"
+                onClick={() => setCurrentMonth(new Date())}
+              >
+                Today
+              </button>
+              <button
+                className="navBtn"
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+
+          <div className="bottomSection">
+            <aside className="notesPanel">
+              <div className="notesBlock">
+                <h2>Notes</h2>
+                <p className="mutedText">
+                  General notes for {format(currentMonth, "MMMM yyyy")}
+                </p>
+                <textarea
+                  className="notesTextarea"
+                  placeholder="Write monthly notes here..."
+                  value={currentMonthNote}
+                  onChange={(e) => updateMonthNote(e.target.value)}
+                />
+              </div>
+
+              <div className="notesBlock">
+                <h2>Selected Range</h2>
+                <p className="selectionLabel">{selectedSummary}</p>
+
+                <textarea
+                  className="notesTextarea"
+                  placeholder="Add a note for the selected date range..."
+                  value={currentRangeNote}
+                  onChange={(e) => updateRangeNote(e.target.value)}
+                  disabled={!rangeKey}
+                />
+
+                <div className="metaActions">
+                  <button className="clearBtn" onClick={clearSelection}>
+                    Clear Selection
+                  </button>
+                </div>
+              </div>
+            </aside>
+
+            <section className="gridPanel">
+              <div className="monthHeader">
+                <div>
+                  <p className="monthLabel">{format(currentMonth, "yyyy")}</p>
+                  <h2>{format(currentMonth, "MMMM")}</h2>
+                </div>
+                <div className="legend">
+                  <span><i className="dot startDot" /> Start</span>
+                  <span><i className="dot rangeDot" /> In range</span>
+                  <span><i className="dot endDot" /> End</span>
+                </div>
+              </div>
+
+              <div className="weekdaysRow">
+                {weekdays.map((day) => (
+                  <div key={day} className="weekdayCell">
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              <div className="daysGrid">
+                {calendarDays.map((day) => {
+                  const sameMonth = isSameMonth(day, currentMonth);
+                  const isStart = !!startDate && isSameDay(day, startDate);
+                  const isEnd = !!endDate && isSameDay(day, endDate);
+                  const between = isInRange(day);
+
+                  let className = "dayCell";
+                  if (!sameMonth) className += " mutedDay";
+                  if (between) className += " inRangeDay";
+                  if (isStart) className += " startDay";
+                  if (isEnd) className += " endDay";
+                  if (isStart && isEnd) className += " singleDay";
+
+                  return (
+                    <button
+                      key={day.toISOString()}
+                      className={className}
+                      onClick={() => handleDayClick(day)}
+                    >
+                      <span className="dayNumber">{format(day, "d")}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
